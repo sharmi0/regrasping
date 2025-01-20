@@ -102,22 +102,8 @@ class ExecuteGrasp(BaseState):
                 print("l_normal: ", l_normal, " r_normal: ", r_normal)  # SUS, dot product should have normalized vectors first
                 antipodal_angle = np.arccos(np.clip(np.dot(l_normal,-1.0*r_normal), -1.0, 1.0))
                 if (antipodal_angle < np.deg2rad(fsm_params.antipodal_thresh)):
-                    print("Pinch grasp success, angles are antipodal.") 
-                    #grab object tighter
-                    pinch_force = 2.5 #N
-                   
-                    Fl, taul = self.close_along_normal(-pinch_force,l_normal,Jl_cur) 
-                    Fr, taur = self.close_along_normal(-pinch_force,r_normal,Jr_cur)
-                    
-                    first2links_idxs = [2,3,6,7]
-                    GP.gr_data.set_kp(first2links_idxs, np.zeros((4,)))
-                    GP.gr_data.set_kd(first2links_idxs, np.zeros((4,)))
-
-
-                    tau_close = -np.concatenate([taul,taur])
-                    GP.gr_data.set_tau_ff(first2links_idxs,tau_close)
-
-                    next_state = "LiftObject"
+                    print("Pinch grasp success, angles are antipodal.")
+                    next_state = "CloseAlongNormals"
                 else:
                     print("Pinch grasp success, but angles are not antipodal. Regrasping.")
                     next_state = "Regrasp"
@@ -154,17 +140,3 @@ class ExecuteGrasp(BaseState):
         if next_state == "LiftObject" or next_state == "Regrasp":
             self.grasp_attempts = 0
         return next_state
-
-    ### helper functions ###
-
-    def close_along_normal(self,force,normal,J):
-        tau_ff = np.zeros((4,1))
-        F = np.zeros((2,1))
-        F = force*normal[0:2]
-
-        # convert forces to joint torques (for first two links only)
-        J2 = J[0:2,1:3]
-        tau_ff = np.matmul(J2.T, F)
-
-
-        return F, tau_ff

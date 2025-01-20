@@ -20,7 +20,7 @@ xml_path = os.path.join(bg.assets.ASSETS_DIR, 'scene')
 obj_type = "cylinder"
 obj_pos = [0.23, 0.0, 0.05]
 obj_height = 0.06 
-obj_radius = 0.03
+obj_radius = 0.04
 obj_mass = 0.2
 obj_inertia_xy = (1/4)*obj_mass*obj_radius**2 + 1/12*obj_mass*obj_height**2
 obj_inertia_z = (1/2)*obj_mass*obj_radius**2
@@ -45,12 +45,15 @@ xml_string = """
 
 
 
+
 # mj_model = mj.MjModel.from_xml_path(os.path.join(bg.assets.ASSETS_DIR, 'scene_with_object.xml'))
 mj_model = mj.MjModel.from_xml_string(xml_string)
 
 hw_mode = bg.HardwareEnable.NO_HW
-# sens_mode = bg.SensorDataMode.RAW_PRESSURE_VALS
 sens_mode = bg.SensorDataMode.NO_PRESSURE_VALS
+
+# hw_mode = bg.HardwareEnable.FINGERS_ONLY
+# sens_mode = bg.SensorDataMode.RAW_PRESSURE_VALS
 # platform
 log_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),'logs/')
 GP = bg.GripperPlatform(mj_model, viewer_enable=True, hardware_enable=hw_mode, sensor_mode=sens_mode, log_path=None)

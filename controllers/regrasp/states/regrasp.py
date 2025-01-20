@@ -2,6 +2,7 @@
 import numpy as np
 from controllers.base.baseState import *
 from .fsm_config import *
+from math import *
 
 # define state
 class Regrasp(BaseState):
@@ -11,6 +12,7 @@ class Regrasp(BaseState):
         self.start_time = 0
         self.new_q_des_pregrasp = fsm_params.q_des_grasp.copy()
         self.new_q_des_grasp = fsm_params.q_des_grasp.copy()
+        
 
     def enter(self, GP):
         print(self.name)
@@ -70,9 +72,6 @@ class Regrasp(BaseState):
 
         #Solving everything for left finger
         #Solve for desired contact location in world coordinates
-        # d_sphere = 0.01 
-        d_sphere = 0.0038
-        d_ellipsoid = 0.0038
         p_world_contactdesx = p_cent[0] - fsm_params.t_gripper_fingerMidpoint[0] #setting base of gripper as origin 
         p_world_contactdesy = p_cent[1] + r_cent
 
@@ -83,41 +82,47 @@ class Regrasp(BaseState):
         p_world_link1basey = 0.0565 #from xml file
 
         #Solve for desired location of the end of link2/beginning of link3 in world coordinates for pre-grasp
-        clearance_pregrasp = 0.01 #clearance for pregrasp from object
-        clearance_grasp = 0.002  # clearance so you're pressing into the object
+        clearance_pregrasp = 0.010 #m #clearance for pregrasp from object
+        clearance_grasp = 0.002  #m # clearance so you're pressing into the object
+
+       
+        #Solve for desired pregrasp location of the end of link2/beginning of link3 in world coordinates for grasp
         p_world_link3basedesx_pregrasp = p_world_contactdesx-fsm_params.l3
-        p_world_link3basedesy_pregrasp = p_world_contactdesy + d_sphere + clearance_pregrasp
+        p_world_link3basedesy_pregrasp = p_world_contactdesy + fsm_params.sensor_diameter + clearance_pregrasp
 
         #Solve for desired location of the end of link2/beginning of link3 in world coordinates for grasp
         p_world_link3basedesx_grasp = p_world_contactdesx-fsm_params.l3
-        p_world_link3basedesy_grasp = p_world_contactdesy + d_sphere - clearance_grasp
+        p_world_link3basedesy_grasp = p_world_contactdesy + fsm_params.sensor_diameter - clearance_grasp
 
         #get pregrasp coordinates and set desired joint angles
-        left_q_des_pregrasp = self.calculate_coordinates("left", p_world_link3basedesx_pregrasp, p_world_link3basedesy_pregrasp, p_world_link1basey)
-        self.new_q_des_pregrasp[1:5] = left_q_des_pregrasp
-        right_q_des_pregrasp = self.calculate_coordinates("right", p_world_link3basedesx_pregrasp, p_world_link3basedesy_pregrasp, p_world_link1basey)
-        self.new_q_des_pregrasp[5:9] = right_q_des_pregrasp    
+        left_q_des_pregrasp, feasible = self.calculate_coordinates("left", p_world_link3basedesx_pregrasp, p_world_link3basedesy_pregrasp, p_world_link1basey)
+        if feasible:
+            self.new_q_des_pregrasp[1:5] = left_q_des_pregrasp
+        right_q_des_pregrasp, feasible = self.calculate_coordinates("right", p_world_link3basedesx_pregrasp, p_world_link3basedesy_pregrasp, p_world_link1basey)
+        if feasible:
+            self.new_q_des_pregrasp[5:9] = right_q_des_pregrasp    
 
         #get grasp coordinates and set desired joint angles
-        left_q_des_grasp = self.calculate_coordinates("left", p_world_link3basedesx_pregrasp, p_world_link3basedesy_grasp, p_world_link1basey)
-        self.new_q_des_grasp[1:5] = left_q_des_grasp
-        right_q_des_grasp = self.calculate_coordinates("right", p_world_link3basedesx_pregrasp, p_world_link3basedesy_grasp, p_world_link1basey)
-        self.new_q_des_grasp[5:9] = right_q_des_grasp  
+        left_q_des_grasp, feasible = self.calculate_coordinates("left", p_world_link3basedesx_grasp, p_world_link3basedesy_grasp, p_world_link1basey)
+        if feasible:
+             self.new_q_des_grasp[1:5] = left_q_des_grasp
+        right_q_des_grasp, feasible = self.calculate_coordinates("right", p_world_link3basedesx_grasp, p_world_link3basedesy_grasp, p_world_link1basey)
+        if feasible:
+             self.new_q_des_grasp[5:9] = right_q_des_grasp  
 
 
     def exit(self, GP):
         self.enabled = 0                      
 
     def execute(self, GP):
-
-        #TODO: put ellipsoid flag in fsm config and set all values taht depe3nd on ellipsoid or sphere here
+        # GP.paused = not GP.paused
         # stay in this state
         next_state = self.name
 
         # get current time
         cur_time = GP.time()
-
         
+        #pregrasp
         if cur_time - self.start_time < fsm_params.times['regrasp']:
             # go to desired grasp positions
             GP.gr_data.set_q_des(GP.gr_data.all_idxs,   self.new_q_des_pregrasp)
@@ -130,7 +135,7 @@ class Regrasp(BaseState):
             GP.gr_data.kinematics['base_des']['p'] = fsm_params.base_pos_default
             GP.gr_data.kinematics['base_des']['R'] = fsm_params.base_R_default         
 
-        
+        #grasp
         elif cur_time - self.start_time < fsm_params.times['regrasp'] + fsm_params.times['grasp']:
             # go to desired grasp positions
             GP.gr_data.set_q_des(GP.gr_data.all_idxs,   self.new_q_des_grasp)
@@ -154,11 +159,11 @@ class Regrasp(BaseState):
             print("l_normal: ", l_normal, " r_normal: ", r_normal)  # SUS, dot product should have normalized vectors first
             antipodal_angle = np.arccos(np.clip(np.dot(l_normal,-1.0*r_normal), -1.0, 1.0))
             if (antipodal_angle < np.deg2rad(fsm_params.antipodal_thresh)):
-                 print("Angles Are Antipodal After Regrasp")
-                 next_state = "LiftObject"
+                print("Angles Are Antipodal After Regrasp")
+                next_state = "CloseAlongNormals"
             else:
-                 print("Angles Are Not Antipodal,  Lift Anyway")
-                 next_state = "LiftObject"
+                print("Angles Are Not Antipodal,  Reset")
+                next_state = "Reset"
             
 
         # check for manual state transition to reset
@@ -196,9 +201,8 @@ class Regrasp(BaseState):
     
     def calculate_coordinates(self, finger, p_world_link3basedesx, p_world_link3basedesy, p_world_link1basey):
         #p_world_link3basedesx, p_world_link3basedesy are the base of link3
-        #TODO:  #Implement checks to make sure geometry is feasible.
+        feasible = True
         link_des=np.zeros((4,))
-        link3_offset = 0.8 #angle in radians to offset link3 by 
         if finger == "right":
             p_world_link1basey = -p_world_link1basey
             p_world_link3basedesy = -p_world_link3basedesy
@@ -208,20 +212,26 @@ class Regrasp(BaseState):
         l3 = fsm_params.l3
         c = np.sqrt(p_world_link3basedesx**2 + (p_world_link1basey-p_world_link3basedesy)**2)
         print("c: ", c)
+        l1new = l1
+        l2new = l2
+        cnew = c
 
-        l1new = l1*10
-        l2new = l2*10
-        cnew = c*10
-        gamma = np.arccos((l1new**2 + l2new**2 - cnew)/(2*l1new*l2new))
+        print("cosine argument: ", (l1new**2 + l2new**2 - cnew**2)/(2*l1new*l2new))
+
+        gamma = np.arccos((l1new**2 + l2new**2 - cnew**2)/(2*l1new*l2new))
         alpha = np.arcsin(l1*np.sin(gamma)/c)
         beta = np.pi - gamma - alpha
         phi = np.arccos(p_world_link3basedesx/c)
 
         print("[gamma, alpha, beta, phi]: ", gamma, alpha, beta, phi)
 
+        if isnan(gamma) or isnan(alpha) or isnan(phi):
+             print("Geometry Not Feasible")
+             feasible = False
+
         link1_des = beta - phi
         link2_des = -(np.pi - gamma)
-        link3_des = alpha + phi - link3_offset
+        link3_des = alpha + phi - 0.04
 
         if finger == "left":
                 link_des[1] = link1_des
@@ -234,4 +244,4 @@ class Regrasp(BaseState):
                 link_des[2] = -link2_des
                 link_des[3] = -link3_des
 
-        return link_des
+        return link_des, feasible

@@ -4,6 +4,7 @@ from .states.reset import *
 from .states.waiting import *
 from .states.execute_grasp import *
 from .states.regrasp import *
+from .states.close_along_normals import *
 from .states.lift_object import *
 from .states.hold_object import *
 
@@ -14,6 +15,7 @@ class RegraspFSM(FiniteStateMachine):
                 Waiting(),
                 ExecuteGrasp(),
                 Regrasp(),
+                CloseAlongNormals(),
                 LiftObject(),
                 HoldObject()] # Note: FSM will start in first state in states list above
         self.states = dict(zip([state.name for state in states], states))
